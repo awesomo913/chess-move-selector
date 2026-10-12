@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import math
 import queue
 import sys
 import threading
@@ -72,11 +73,12 @@ def ts() -> str:
     return datetime.now().strftime("%H:%M:%S")
 
 
-def first_existing_engine() -> str:
+def first_existing_engine() -> str | None:
+    """First DEFAULT_ENGINES entry that exists on disk, else None."""
     for p in DEFAULT_ENGINES:
         if Path(p).is_file():
             return p
-    return DEFAULT_ENGINES[0]
+    return None
 
 
 # =============================================================== the analyzer
@@ -163,12 +165,14 @@ class Analyzer:
 
     def _poll_s(self) -> float:
         """Poll interval in seconds; a garbage poll_ms option must not kill
-        the loop (falls back to 0.6 s)."""
+        the loop (falls back to 0.6 s; non-finite values are clamped too)."""
         try:
             v = float(self.opts["poll_ms"]) / 1000.0
         except (TypeError, ValueError):
             v = 0.6
-        return max(0.05, v)
+        if not math.isfinite(v):        # "inf"/overflow must never reach
+            v = 0.6                     # Event.wait() (OverflowError)
+        return max(0.05, min(v, 3600.0))
 
     def _loop(self):
         self._start_engine()
@@ -210,7 +214,9 @@ class Analyzer:
                         delay = float(self.opts["retry_s"])
                     except (TypeError, ValueError):
                         delay = 3.0
-                    self._sleep(delay)
+                    if not math.isfinite(delay):   # see _poll_s
+                        delay = 3.0
+                    self._sleep(min(delay, 3600.0))
                     continue
 
             # --- read the board
@@ -472,6 +478,11 @@ class Analyzer:
                 "color": cls_color,
                 "loss": None if loss is None else round(loss, 1),
             })
+        if not rows:
+            # no PV lines came back (transient/empty engine response): report
+            # no-analysis so the caller retries this FEN instead of marking it
+            # analyzed with zero suggestions and never looking at it again
+            return False
         head = rows[0] if rows else None
         self.emit({
             "kind": "suggestions",

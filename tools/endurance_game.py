@@ -211,6 +211,9 @@ def start_playwright(attempts: int = 3):
 
 
 def rel_center(alg: str, flipped: bool) -> tuple[float, float]:
+    if (len(alg) < 2 or not ("a" <= alg[0] <= "h")
+            or not ("1" <= alg[1] <= "8")):
+        raise ValueError(f"rel_center: bad square {alg!r}")
     f = ord(alg[0]) - 97
     rk = int(alg[1]) - 1
     col, row = (7 - f, rk) if flipped else (f, 7 - rk)
@@ -231,7 +234,7 @@ def outcome(result: str | None, we_are_white: bool) -> str:
 def _piece_at(fen: str, alg: str) -> str:
     """Piece letter on `alg` (e.g. 'e4') from a FEN, '.' for empty, '?' unknown."""
     rows = (fen or "").split(" ")[0].split("/")
-    if len(rows) != 8 or len(alg) < 2:
+    if len(rows) != 8 or len(alg) < 2 or not alg[1].isdigit():
         return "?"
     f = ord(alg[0]) - 97
     rk = int(alg[1]) - 1
@@ -316,8 +319,11 @@ def main() -> int:
                 try:
                     if ChessComReader._is_chess_url(p.url):
                         cands.append((score(p.url), p.url, p))
-                except Exception:
-                    pass
+                except Exception as e:
+                    # never drop a tab silently: a transiently unreadable page
+                    # must leave a trace instead of quietly changing the target
+                    print(f"tab skipped while scanning ({type(e).__name__})",
+                          flush=True)
         if not cands:
             print("no chess.com tab")
             return 2
