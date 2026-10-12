@@ -1,0 +1,17 @@
+# Python
+__pycache__/
+*.pyc
+.venv/
+
+# local backups / editor leftovers
+*.bak*
+*.tmp
+
+# runtime artifacts (logs, probe output, saved PGNs)
+scratch/
+
+# the Stockfish binary is not distributed here - download your own into bin/
+bin/
+
+# the upstream Stockfish source is not vendored - clone it if you want to build
+Stockfish/
